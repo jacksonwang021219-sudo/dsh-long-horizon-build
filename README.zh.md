@@ -3,10 +3,11 @@
 [English](README.md) | 中文
 
 > **这份检出是 DeepSeek Harness 的长程任务模式快照**（上游 `master` 提交
-> `47f9438`，MIT），在上游之上加入了滑动窗口上下文策略：最近若干用户轮次原样保留，
-> 更早的历史由每一轮新建的 agent 到工作区重新检索组装。`long-horizon` preset 随部署
-> 发布，新会话默认就跑长程任务模式。启动 WebUI 长程模式的步骤、`dsh-context-window`
-> 插件与相对上游的改动见 [LONG-HORIZON.md](LONG-HORIZON.md)。
+> `47f9438`，MIT），在上游之上加入了滑动窗口上下文策略：最近若干用户请求原样保留，
+> 更早请求的执行轨迹由窗口在折叠时自己写下的记录顶替，harness 原有的
+> `compaction-basic` 仍在下面兜底。`long-horizon` preset 随部署发布，新会话默认就跑
+> 长程任务模式。启动 WebUI 长程模式的步骤、`dsh-context-window` 插件与相对上游的改动
+> 见 [LONG-HORIZON.md](LONG-HORIZON.md)。
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 

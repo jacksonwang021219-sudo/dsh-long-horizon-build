@@ -2,15 +2,42 @@
 
 Sliding-window context policy for long-running sessions, carried by the main agent itself.
 
-The model-visible surface is a window over **user requests**, not over
-request-and-answer pairs:
+## What this row adds to a composition
+
+A composition without this row keeps its history the way the harness ships it:
+the whole conversation stays on the model-visible surface, `compaction-basic`
+compresses it once it passes the model threshold, and `tool-result-pruner`
+truncates oversized tool results behind a head and tail. Requests and the traces
+that answered them are kept or compressed together; nothing distinguishes one
+user request from another.
+
+Mounting this row changes three things.
+
+1. **The window is defined over USER REQUESTS, not over request-and-answer
+   pairs.** The two are kept or dropped separately, which is what lets the
+   prompts a session was given outlive the work it did in response to them.
+2. **A trace is replaced by a record before it leaves.** The record is written
+   by one model call the window makes itself at the moment a fold needs it, and
+   it stands in the window where the request-and-answer pair it replaced used to
+   sit.
+3. **The main agent gains a read path and no write path**: `read_notes`,
+   `fix_note`, and `session_log`, plus a prompt section that says when to use
+   them.
+
+`compaction-basic` and `tool-result-pruner` stay mounted underneath, unchanged.
+They are what handles a surface that is still above the model threshold after
+the window has folded everything it can.
+
+## The window
+
+The model-visible surface is a window over **user requests**:
 
 - The most recent `retainUserTurns` requests (default 5, counting the request
   being prepared) stay verbatim.
 - The execution traces that answered the older ones do not. Each completed
-  turn's trace is replaced by the **record the agent wrote for that turn**, and
-  requests older than the window leave the surface entirely, replaced by one
-  rebuilt `<folded-history>` digest of their records.
+  turn's trace is replaced by the **record for that turn**, and requests older
+  than the window leave the surface entirely, replaced by one rebuilt
+  `<folded-history>` digest of their records.
 - Inside the request in progress, the trace is folded once it passes
   `foldTriggerTokens` (default 400K), back to the most recent `retainTurnTokens`
   (default 200K), at whole agent-step boundaries.
@@ -38,10 +65,6 @@ has the final word on the same step.
 |---|---|
 | Prompt section `context:sliding-window` (order 190) | Tells the main agent how to read notes back and how to correct one. Empty for delegated child sessions. |
 | `read_notes`, `fix_note`, `session_log` tools | Read the notes, report a wrong note, and read the durable log — raw events by seq range, or the record list. |
-
-This replaces the separate context-assembly agent the policy used to spawn once
-per user turn: the same knowledge now sits in the running agent's own prompt,
-next to the tools that implement it.
 
 ### Who writes a note
 
@@ -91,11 +114,10 @@ line, so the main agent reads it as one of its own past answers and can reach th
 original events through `session_log`. A fold that could not be recorded cites
 its log range alone instead of pretending to carry a note.
 
-The log also carries window-authored blocks for a composition whose records come
-from the agent's own tool calls (`recordMode: 'agent'`, kept for the fold rules
-below). Those payloads ride the durable `tool/result.meta` field
-(`kind: 'dsh-context-window/record'`); the recorder path leaves that list empty
-and covers every span it folds.
+The log also carries window-authored blocks for the fold rules that read a
+record list rather than a note file. That list is empty in the shipped
+composition, because the recorder covers every span it folds, so those rules
+never fire; they are kept for a composition whose records arrive some other way.
 
 ### When a fold happens
 
