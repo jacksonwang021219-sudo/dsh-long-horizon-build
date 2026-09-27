@@ -1,0 +1,6 @@
+# Benchmark runs write into session workspaces, which the HMR row watches from
+# the profile root; a full reload then re-execs the whole CLI and (with
+# `--port 0`) moves to a new port, killing live sessions. Benchmarks want a
+# stable endpoint, so this overlay turns the reloader off.
+- id: hmr
+  disabled: true

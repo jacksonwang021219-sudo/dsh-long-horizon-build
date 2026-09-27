@@ -1,0 +1,10 @@
+/out/
+/raw/
+/state/
+/logs/
+
+__pycache__/
+*.py[cod]
+*.log
+.env
+.DS_Store

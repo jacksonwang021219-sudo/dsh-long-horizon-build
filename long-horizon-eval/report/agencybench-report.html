@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgencyBench 评测：标准模式与长程任务模式</title>
+<style>
+  body { margin:0; background:#f7f8fa; color:#16181d;
+    font:15.5px/1.75 -apple-system,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif; }
+  header { background:#101827; color:#eef2f7; padding:40px 44px 34px; }
+  header h1 { margin:0 0 10px; font-size:25px; font-weight:600; letter-spacing:.2px; }
+  header p { margin:4px 0; color:#a9b4c4; font-size:14px; }
+  main { max-width:1080px; margin:0 auto; padding:0 24px 72px; }
+  section { background:#fff; border:1px solid #e6e8ec; border-radius:10px; padding:28px 32px; margin:20px 0; }
+  h2 { font-size:19px; font-weight:600; margin:0 0 16px; }
+  h3 { font-size:15.5px; font-weight:600; margin:24px 0 8px; color:#2b3444; }
+  p { margin:0 0 14px; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; margin:14px 0 10px; }
+  th, td { border-bottom:1px solid #e9ebef; padding:8px 10px; text-align:right; white-space:nowrap; }
+  th { background:#f4f5f7; font-weight:600; color:#3d4655; }
+  td.l, th.l { text-align:left; white-space:normal; }
+  tbody tr:hover { background:#fafbfc; }
+  .win { color:#0b7a5a; }
+  .loss { color:#b3261e; }
+  .tie { color:#6b7280; }
+  code { background:#f1f2f4; padding:1px 5px; border-radius:4px; font-size:12.5px; }
+  pre { background:#101827; color:#dfe5ee; padding:15px 17px; border-radius:8px; overflow:auto; font-size:12.5px; line-height:1.6; }
+  figure { margin:18px 0 8px; }
+  figcaption { color:#6b7280; font-size:12.5px; margin-top:8px; }
+  footer { max-width:1080px; margin:0 auto; padding:0 24px 40px; color:#6b7280; font-size:12.5px; }
+  @media (max-width:820px) { table { font-size:12.5px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>AgencyBench 评测：标准模式与长程任务模式</h1>
+  <p>DeepSeek Harness · deepseek-flash（100 万 token 上下文）· 2026 年 9 月 25 至 26 日</p>
+  <p>9 个 scenario / 31 个子任务，两个模式各跑一次；Backend/scenario1 另跑四轮</p>
+</header>
+<main>
+
+<section class="intro">
+  <h2>说明</h2>
+  <p>标准模式保留全部历史，只有在接近模型上限时才交给 <code>compaction-basic</code> 压缩。</p>
+  <p>长程任务模式把窗口定义在用户提问上。最近 5 个提问保留原文，更早轮次的执行轨迹由记录顶替，
+  单个轮次内的轨迹超过 40 万 token 时折回 20 万，折叠边界落在完整的 agent 步上。
+  记录不由主 Agent 写：每轮结束，窗口自己发起一次模型调用，把这一轮的轨迹整理成一页结论，
+  含任务定义、策略与进展、关键结论、交付与验收四个字段，外加至多几条可复用的经验，
+  存进该会话的笔记库 <code>&lt;DSH_HOME&gt;/notes/&lt;sessionId&gt;/</code>，
+  连同这次调用问了什么、花了多少 token 一起留档。每条笔记都带它在会话日志里的原文 seq 区间。
+  主 Agent 一侧只有读的能力：<code>read_notes</code> 按需取笔记，细节不够时按笔记 id 取全文；
+  <code>session_log</code> 按区间取回日志原文，或列出全部记录；<code>fix_note</code> 用来报告写错的笔记。
+  提示段只讲怎么读、怎么纠错。</p>
+  <p>31 个子任务跑下来，长程任务模式平均 9.20 分，标准模式 8.44 分，3 胜 6 平 0 负。
+  成本上长程模式用了 161.6 M token，标准模式 365.8 M；
+  平均每次模型调用承载的上下文，长程 85 K，标准 180 K。
+  代价落在墙钟上，长程 281 分钟，标准 252 分钟。</p>
+</section>
+
+<section>
+  <h2>1 结果</h2>
+  <p>31 个子任务跑完，标准模式平均 8.44 分，长程任务模式 9.20 分，
+  9 个 scenario 里长程模式赢 3 个、平 6 个、没有输过。总分差 +0.76。</p>
+  <table>
+    <thead><tr>
+      <th class="l">scenario</th><th>子任务</th><th>标准分</th><th>长程分</th><th>分差</th>
+      <th>标准 token</th><th>长程 token</th><th>长程/标准</th><th>墙钟 标准 / 长程（分钟）</th>
+    </tr></thead>
+    <tbody>
+<tr><td class='l'>Backend/scenario1</td><td>5</td><td>9.20</td><td>10.00</td><td class='win'>+0.80</td><td>58.3 M</td><td>63.1 M</td><td class='loss'>1.08×</td><td>39 / 102</td></tr>
+<tr><td class='l'>Backend/scenario3</td><td>5</td><td>5.10</td><td>9.10</td><td class='win'>+4.00</td><td>228.9 M</td><td>52.3 M</td><td class='win'>0.23×</td><td>95 / 81</td></tr>
+<tr><td class='l'>Code/scenario1</td><td>5</td><td>4.00</td><td>6.00</td><td class='win'>+2.00</td><td>14.8 M</td><td>24.6 M</td><td class='loss'>1.66×</td><td>23 / 41</td></tr>
+<tr><td class='l'>Code/scenario6</td><td>1</td><td>10.00</td><td>10.00</td><td class='tie'>+0.00</td><td>39.5 M</td><td>0.6 M</td><td class='win'>0.02×</td><td>40 / 3</td></tr>
+<tr><td class='l'>Code/scenario7</td><td>1</td><td>10.00</td><td>10.00</td><td class='tie'>+0.00</td><td>0.5 M</td><td>0.5 M</td><td class='win'>0.90×</td><td>3 / 2</td></tr>
+<tr><td class='l'>Research/scenario2</td><td>5</td><td>8.00</td><td>8.00</td><td class='tie'>+0.00</td><td>2.3 M</td><td>1.3 M</td><td class='win'>0.55×</td><td>6 / 6</td></tr>
+<tr><td class='l'>Research/scenario3</td><td>5</td><td>9.67</td><td>9.67</td><td class='tie'>+0.00</td><td>8.7 M</td><td>5.9 M</td><td class='win'>0.68×</td><td>15 / 19</td></tr>
+<tr><td class='l'>Research/scenario4</td><td>2</td><td>10.00</td><td>10.00</td><td class='tie'>+0.00</td><td>7.8 M</td><td>7.2 M</td><td class='win'>0.93×</td><td>15 / 14</td></tr>
+<tr><td class='l'>Research/scenario5</td><td>2</td><td>10.00</td><td>10.00</td><td class='tie'>+0.00</td><td>5.0 M</td><td>6.0 M</td><td class='loss'>1.21×</td><td>16 / 14</td></tr>
+      <tr><td class="l">合计 / 均值</td><td>31</td><td>8.44</td><td>9.20</td>
+        <td class="win">+0.76</td><td>365.8 M</td><td>161.6 M</td>
+        <td class="win">0.44×</td>
+        <td>252 / 281</td></tr>
+    </tbody>
+  </table>
+  <figure>
+    <svg viewBox="0 0 900 448" width="100%" role="img">
+<rect x="0" y="0" width="100%" height="100%" fill="#fff"/>
+<text x="240" y="24" text-anchor="end" font-size="13" fill="#6b7280">标准模式</text>
+<text x="240" y="42" text-anchor="end" font-size="13" fill="#0f766e">长程任务模式</text>
+<line x1="250.0" y1="40" x2="250.0" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="250.0" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">0.0</text>
+<line x1="397.5" y1="40" x2="397.5" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="397.5" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">2.8</text>
+<line x1="545.0" y1="40" x2="545.0" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="545.0" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">5.5</text>
+<line x1="692.5" y1="40" x2="692.5" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="692.5" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">8.2</text>
+<line x1="840.0" y1="40" x2="840.0" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="840.0" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">11.0</text>
+<text x="236" y="76" text-anchor="end" font-size="12" fill="#374151">Backend/scenario1</text>
+<rect x="250" y="50" width="493.5" height="16" rx="3" fill="#9ca3af"/>
+<text x="749.5" y="62" font-size="11" fill="#374151">9.20</text>
+<rect x="250" y="68" width="536.4" height="16" rx="3" fill="#0f766e"/>
+<text x="792.4" y="80" font-size="11" fill="#374151">10.00</text>
+<text x="236" y="118" text-anchor="end" font-size="12" fill="#374151">Backend/scenario3</text>
+<rect x="250" y="92" width="273.4" height="16" rx="3" fill="#9ca3af"/>
+<text x="529.4" y="104" font-size="11" fill="#374151">5.10</text>
+<rect x="250" y="110" width="488.0" height="16" rx="3" fill="#0f766e"/>
+<text x="744.0" y="122" font-size="11" fill="#374151">9.10</text>
+<text x="236" y="160" text-anchor="end" font-size="12" fill="#374151">Code/scenario1</text>
+<rect x="250" y="134" width="214.5" height="16" rx="3" fill="#9ca3af"/>
+<text x="470.5" y="146" font-size="11" fill="#374151">4.00</text>
+<rect x="250" y="152" width="321.8" height="16" rx="3" fill="#0f766e"/>
+<text x="577.8" y="164" font-size="11" fill="#374151">6.00</text>
+<text x="236" y="202" text-anchor="end" font-size="12" fill="#374151">Code/scenario6</text>
+<rect x="250" y="176" width="536.4" height="16" rx="3" fill="#9ca3af"/>
+<text x="792.4" y="188" font-size="11" fill="#374151">10.00</text>
+<rect x="250" y="194" width="536.4" height="16" rx="3" fill="#0f766e"/>
+<text x="792.4" y="206" font-size="11" fill="#374151">10.00</text>
+<text x="236" y="244" text-anchor="end" font-size="12" fill="#374151">Code/scenario7</text>
+<rect x="250" y="218" width="536.4" height="16" rx="3" fill="#9ca3af"/>
+<text x="792.4" y="230" font-size="11" fill="#374151">10.00</text>
+<rect x="250" y="236" width="536.4" height="16" rx="3" fill="#0f766e"/>
+<text x="792.4" y="248" font-size="11" fill="#374151">10.00</text>
+<text x="236" y="286" text-anchor="end" font-size="12" fill="#374151">Research/scenario2</text>
+<rect x="250" y="260" width="429.1" height="16" rx="3" fill="#9ca3af"/>
+<text x="685.1" y="272" font-size="11" fill="#374151">8.00</text>
+<rect x="250" y="278" width="429.1" height="16" rx="3" fill="#0f766e"/>
+<text x="685.1" y="290" font-size="11" fill="#374151">8.00</text>
+<text x="236" y="328" text-anchor="end" font-size="12" fill="#374151">Research/scenario3</text>
+<rect x="250" y="302" width="518.4" height="16" rx="3" fill="#9ca3af"/>
+<text x="774.4" y="314" font-size="11" fill="#374151">9.67</text>
+<rect x="250" y="320" width="518.4" height="16" rx="3" fill="#0f766e"/>
+<text x="774.4" y="332" font-size="11" fill="#374151">9.67</text>
+<text x="236" y="370" text-anchor="end" font-size="12" fill="#374151">Research/scenario4</text>
+<rect x="250" y="344" width="536.4" height="16" rx="3" fill="#9ca3af"/>
+<text x="792.4" y="356" font-size="11" fill="#374151">10.00</text>
+<rect x="250" y="362" width="536.4" height="16" rx="3" fill="#0f766e"/>
+<text x="792.4" y="374" font-size="11" fill="#374151">10.00</text>
+<text x="236" y="412" text-anchor="end" font-size="12" fill="#374151">Research/scenario5</text>
+<rect x="250" y="386" width="536.4" height="16" rx="3" fill="#9ca3af"/>
+<text x="792.4" y="398" font-size="11" fill="#374151">10.00</text>
+<rect x="250" y="404" width="536.4" height="16" rx="3" fill="#0f766e"/>
+<text x="792.4" y="416" font-size="11" fill="#374151">10.00</text>
+</svg>
+    <figcaption>各 scenario 得分。灰条是标准模式，绿条是长程任务模式，满分 10 分。</figcaption>
+  </figure>
+  <p>三个场景拉开了差距。Backend/scenario3 上长程 9.10 对标准 5.10，这里也是 token 差距最大的地方：标准烧掉 228.9 M，
+  长程 52.3 M。标准模式在这个场景派生了 6 个子 agent 会话，整个 run 一共 7 个会话，长程只有 2 个。
+  Code/scenario1 上长程 6.00 对标准 4.00，两个模式都没写 benchmark 要求的 <code>docs/subtaskN_rationale.md</code>，
+  每个子任务因此丢 5 分，剩下的差别在方程拟合本身，长程做出来 3 个子任务，标准做出来 2 个。
+  Backend/scenario1 上长程 10.00 对标准 9.20，差的是一道子任务的半档。</p>
+  <p>另外六个场景打平。Code/scenario6 和 scenario7 上两个模式都拿到满分 10 分，研究类的四个场景里，
+  Research/scenario2 双方都是 8.00，scenario3 双方 9.67，scenario4 和 scenario5 双方都是 10.00。</p>
+  <p>成本上的差别比分数更大。长程模式 161.6 M token，标准模式 365.8 M，前者是后者的 0.44 倍。
+  按每次模型调用看，标准模式每步要重读 179.8 K 上下文，长程模式 84.7 K。</p>
+  <figure>
+    <svg viewBox="0 0 900 448" width="100%" role="img">
+<rect x="0" y="0" width="100%" height="100%" fill="#fff"/>
+<text x="240" y="24" text-anchor="end" font-size="13" fill="#6b7280">标准模式</text>
+<text x="240" y="42" text-anchor="end" font-size="13" fill="#0f766e">长程任务模式</text>
+<line x1="250.0" y1="40" x2="250.0" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="250.0" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">0.0×</text>
+<line x1="397.5" y1="40" x2="397.5" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="397.5" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">0.5×</text>
+<line x1="545.0" y1="40" x2="545.0" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="545.0" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">1.0×</text>
+<line x1="692.5" y1="40" x2="692.5" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="692.5" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">1.5×</text>
+<line x1="840.0" y1="40" x2="840.0" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="840.0" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">2.0×</text>
+<text x="236" y="76" text-anchor="end" font-size="12" fill="#374151">Backend/scenario1</text>
+<rect x="250" y="50" width="295.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="551.0" y="62" font-size="11" fill="#374151">1.00×</text>
+<rect x="250" y="68" width="319.4" height="16" rx="3" fill="#0f766e"/>
+<text x="575.4" y="80" font-size="11" fill="#374151">1.08×</text>
+<text x="236" y="118" text-anchor="end" font-size="12" fill="#374151">Backend/scenario3</text>
+<rect x="250" y="92" width="295.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="551.0" y="104" font-size="11" fill="#374151">1.00×</text>
+<rect x="250" y="110" width="67.5" height="16" rx="3" fill="#0f766e"/>
+<text x="323.5" y="122" font-size="11" fill="#374151">0.23×</text>
+<text x="236" y="160" text-anchor="end" font-size="12" fill="#374151">Code/scenario1</text>
+<rect x="250" y="134" width="295.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="551.0" y="146" font-size="11" fill="#374151">1.00×</text>
+<rect x="250" y="152" width="489.2" height="16" rx="3" fill="#0f766e"/>
+<text x="745.2" y="164" font-size="11" fill="#374151">1.66×</text>
+<text x="236" y="202" text-anchor="end" font-size="12" fill="#374151">Code/scenario6</text>
+<rect x="250" y="176" width="295.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="551.0" y="188" font-size="11" fill="#374151">1.00×</text>
+<rect x="250" y="194" width="4.6" height="16" rx="3" fill="#0f766e"/>
+<text x="260.6" y="206" font-size="11" fill="#374151">0.02×</text>
+<text x="236" y="244" text-anchor="end" font-size="12" fill="#374151">Code/scenario7</text>
+<rect x="250" y="218" width="295.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="551.0" y="230" font-size="11" fill="#374151">1.00×</text>
+<rect x="250" y="236" width="266.4" height="16" rx="3" fill="#0f766e"/>
+<text x="522.4" y="248" font-size="11" fill="#374151">0.90×</text>
+<text x="236" y="286" text-anchor="end" font-size="12" fill="#374151">Research/scenario2</text>
+<rect x="250" y="260" width="295.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="551.0" y="272" font-size="11" fill="#374151">1.00×</text>
+<rect x="250" y="278" width="163.0" height="16" rx="3" fill="#0f766e"/>
+<text x="419.0" y="290" font-size="11" fill="#374151">0.55×</text>
+<text x="236" y="328" text-anchor="end" font-size="12" fill="#374151">Research/scenario3</text>
+<rect x="250" y="302" width="295.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="551.0" y="314" font-size="11" fill="#374151">1.00×</text>
+<rect x="250" y="320" width="200.5" height="16" rx="3" fill="#0f766e"/>
+<text x="456.5" y="332" font-size="11" fill="#374151">0.68×</text>
+<text x="236" y="370" text-anchor="end" font-size="12" fill="#374151">Research/scenario4</text>
+<rect x="250" y="344" width="295.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="551.0" y="356" font-size="11" fill="#374151">1.00×</text>
+<rect x="250" y="362" width="274.3" height="16" rx="3" fill="#0f766e"/>
+<text x="530.3" y="374" font-size="11" fill="#374151">0.93×</text>
+<text x="236" y="412" text-anchor="end" font-size="12" fill="#374151">Research/scenario5</text>
+<rect x="250" y="386" width="295.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="551.0" y="398" font-size="11" fill="#374151">1.00×</text>
+<rect x="250" y="404" width="356.8" height="16" rx="3" fill="#0f766e"/>
+<text x="612.8" y="416" font-size="11" fill="#374151">1.21×</text>
+</svg>
+    <figcaption>各 scenario 的 token 比值，长程除以标准。灰条固定在 1.0× 作为基准，绿条低于 1.0 表示长程更省。
+    Code/scenario6 是 0.02×，Backend/scenario3 是 0.23×。</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>2 成本差在哪里</h2>
+  <p>长程模式把若干步之前的完整轨迹换成一条记录块，于是每一步要重读的上下文有了上界。这次运行里长程模式写出 45 条记录，
+  触发 34 次折叠，标准模式两项都是 0。它的上下文峰值始终没到 1M 窗口的压缩阈值，一直在原样重发全部历史。</p>
+  <figure>
+    <svg viewBox="0 0 900 448" width="100%" role="img">
+<rect x="0" y="0" width="100%" height="100%" fill="#fff"/>
+<text x="240" y="24" text-anchor="end" font-size="13" fill="#6b7280">标准模式</text>
+<text x="240" y="42" text-anchor="end" font-size="13" fill="#0f766e">长程任务模式</text>
+<line x1="250.0" y1="40" x2="250.0" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="250.0" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">0.0K</text>
+<line x1="397.5" y1="40" x2="397.5" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="397.5" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">39.4K</text>
+<line x1="545.0" y1="40" x2="545.0" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="545.0" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">78.8K</text>
+<line x1="692.5" y1="40" x2="692.5" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="692.5" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">118.2K</text>
+<line x1="840.0" y1="40" x2="840.0" y2="424" stroke="#e5e7eb" stroke-width="1"/>
+<text x="840.0" y="440" text-anchor="middle" font-size="11" fill="#9ca3af">157.6K</text>
+<text x="236" y="76" text-anchor="end" font-size="12" fill="#374151">Backend/scenario1</text>
+<rect x="250" y="50" width="590.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="846.0" y="62" font-size="11" fill="#374151">184.95K</text>
+<rect x="250" y="68" width="371.3" height="16" rx="3" fill="#0f766e"/>
+<text x="627.3" y="80" font-size="11" fill="#374151">99.17K</text>
+<text x="236" y="118" text-anchor="end" font-size="12" fill="#374151">Backend/scenario3</text>
+<rect x="250" y="92" width="590.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="846.0" y="104" font-size="11" fill="#374151">246.10K</text>
+<rect x="250" y="110" width="513.0" height="16" rx="3" fill="#0f766e"/>
+<text x="769.0" y="122" font-size="11" fill="#374151">137.02K</text>
+<text x="236" y="160" text-anchor="end" font-size="12" fill="#374151">Code/scenario1</text>
+<rect x="250" y="134" width="308.7" height="16" rx="3" fill="#9ca3af"/>
+<text x="564.7" y="146" font-size="11" fill="#374151">82.44K</text>
+<rect x="250" y="152" width="237.5" height="16" rx="3" fill="#0f766e"/>
+<text x="493.5" y="164" font-size="11" fill="#374151">63.42K</text>
+<text x="236" y="202" text-anchor="end" font-size="12" fill="#374151">Code/scenario6</text>
+<rect x="250" y="176" width="590.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="846.0" y="188" font-size="11" fill="#374151">216.06K</text>
+<rect x="250" y="194" width="92.5" height="16" rx="3" fill="#0f766e"/>
+<text x="348.5" y="206" font-size="11" fill="#374151">24.69K</text>
+<text x="236" y="244" text-anchor="end" font-size="12" fill="#374151">Code/scenario7</text>
+<rect x="250" y="218" width="89.6" height="16" rx="3" fill="#9ca3af"/>
+<text x="345.6" y="230" font-size="11" fill="#374151">23.94K</text>
+<rect x="250" y="236" width="73.9" height="16" rx="3" fill="#0f766e"/>
+<text x="329.9" y="248" font-size="11" fill="#374151">19.74K</text>
+<text x="236" y="286" text-anchor="end" font-size="12" fill="#374151">Research/scenario2</text>
+<rect x="250" y="260" width="171.4" height="16" rx="3" fill="#9ca3af"/>
+<text x="427.4" y="272" font-size="11" fill="#374151">45.79K</text>
+<rect x="250" y="278" width="105.0" height="16" rx="3" fill="#0f766e"/>
+<text x="361.0" y="290" font-size="11" fill="#374151">28.05K</text>
+<text x="236" y="328" text-anchor="end" font-size="12" fill="#374151">Research/scenario3</text>
+<rect x="250" y="302" width="281.8" height="16" rx="3" fill="#9ca3af"/>
+<text x="537.8" y="314" font-size="11" fill="#374151">75.25K</text>
+<rect x="250" y="320" width="157.5" height="16" rx="3" fill="#0f766e"/>
+<text x="413.5" y="332" font-size="11" fill="#374151">42.07K</text>
+<text x="236" y="370" text-anchor="end" font-size="12" fill="#374151">Research/scenario4</text>
+<rect x="250" y="344" width="221.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="477.0" y="356" font-size="11" fill="#374151">59.01K</text>
+<rect x="250" y="362" width="203.9" height="16" rx="3" fill="#0f766e"/>
+<text x="459.9" y="374" font-size="11" fill="#374151">54.46K</text>
+<text x="236" y="412" text-anchor="end" font-size="12" fill="#374151">Research/scenario5</text>
+<rect x="250" y="386" width="174.0" height="16" rx="3" fill="#9ca3af"/>
+<text x="430.0" y="398" font-size="11" fill="#374151">46.47K</text>
+<rect x="250" y="404" width="168.1" height="16" rx="3" fill="#0f766e"/>
+<text x="424.1" y="416" font-size="11" fill="#374151">44.89K</text>
+</svg>
+    <figcaption>每次模型调用承载的上下文 token 数。标准模式 180 K，长程模式 85 K。</figcaption>
+  </figure>
+  <p>记录的压缩率很可观。以 Backend/scenario1 那一轮为例，6 条记录分别覆盖 29 K、50 K、108 K、113 K、165 K、86 K token 的轨迹，
+  正文只有 6 到 8 千字符。折叠把几十 K 的轨迹压成一条两 K token 左右的块。</p>
+  <p>代价有两处。一是折叠块插在历史中段，会打断 prompt 前缀缓存，长程模式的 fresh input 落在 497 K 到 608 K，
+  标准模式是 130 K 到 158 K。二是墙钟更长，9 个 scenario 合计 281 分钟对 252 分钟，
+  其中 Backend/scenario1 与 Code/scenario1 上长程反而更贵，分别是 1.08 倍和 1.66 倍。子任务少、单轮动作小的场景，记录本身的开销摊不薄。</p>
+</section>
+
+<section>
+  <h2>3 反复跑同一个 scenario</h2>
+  <p>Backend/scenario1 上四个 run，每个都是完整协议：5 个子任务加上按 rubric 反馈的重跑，子任务分数取各次尝试的最高分。
+  标准模式两轮拿到 36 和 40 分，长程模式拿到 50 和 40 分。有意思的是成本：标准模式两轮的 token 相差 1.95 倍（45.5 M 到 88.6 M），
+  长程模式只差 1.13 倍（46.6 M 到 41.4 M）。标准模式的成本随步数和历史长度一起涨，长程模式的上下文有上界，所以贵不起来。</p>
+  <table>
+    <thead><tr><th class="l">模式</th><th class="l">轮次</th><th>Pass@1</th><th>Pass@2</th>
+      <th class="l">各子任务得分</th><th>总 token</th><th>步数</th><th>token/步</th><th>记录/折叠</th><th>墙钟（分钟）</th></tr></thead>
+    <tbody>
+<tr><td class='l'>标准模式</td><td>第 1 轮</td><td>36</td><td class='win'>36</td><td class='l'>10, 6, 4, 6, 10</td><td>45.5 M</td><td>261</td><td>174,177</td><td>0/0</td><td>37</td></tr>
+<tr><td class='l'>标准模式</td><td>第 2 轮</td><td>40</td><td class='win'>40</td><td class='l'>8, 6, 10, 6, 10</td><td>88.6 M</td><td>477</td><td>185,741</td><td>0/0</td><td>82</td></tr>
+<tr><td class='l'>长程任务模式</td><td>第 1 轮</td><td>46</td><td class='win'>50</td><td class='l'>10, 10, 10, 10, 10</td><td>46.6 M</td><td>457</td><td>101,998</td><td>6/6</td><td>79</td></tr>
+<tr><td class='l'>长程任务模式</td><td>第 2 轮</td><td>40</td><td class='win'>40</td><td class='l'>10, 6, 4, 10, 10</td><td>41.4 M</td><td>431</td><td>96,164</td><td>7/8</td><td>69</td></tr>
+    </tbody>
+  </table>
+  <figure>
+    <svg viewBox="0 0 900 300" width="100%" role="img">
+<rect width="100%" height="100%" fill="#fff"/>
+<line x1="70" y1="260.0" x2="870" y2="260.0" stroke="#e5e7eb"/>
+<text x="62" y="264.0" text-anchor="end" font-size="11" fill="#9ca3af">0M</text>
+<line x1="70" y1="202.5" x2="870" y2="202.5" stroke="#e5e7eb"/>
+<text x="62" y="206.5" text-anchor="end" font-size="11" fill="#9ca3af">24M</text>
+<line x1="70" y1="145.0" x2="870" y2="145.0" stroke="#e5e7eb"/>
+<text x="62" y="149.0" text-anchor="end" font-size="11" fill="#9ca3af">49M</text>
+<line x1="70" y1="87.5" x2="870" y2="87.5" stroke="#e5e7eb"/>
+<text x="62" y="91.5" text-anchor="end" font-size="11" fill="#9ca3af">73M</text>
+<line x1="70" y1="30.0" x2="870" y2="30.0" stroke="#e5e7eb"/>
+<text x="62" y="34.0" text-anchor="end" font-size="11" fill="#9ca3af">97M</text>
+<text x="70.0" y="288" text-anchor="middle" font-size="11" fill="#6b7280">第 1 轮</text>
+<text x="870.0" y="288" text-anchor="middle" font-size="11" fill="#6b7280">第 2 轮</text>
+<polyline fill="none" stroke="#9ca3af" stroke-width="2.5" points="70.0,152.7 870.0,50.9"/>
+<circle cx="70.0" cy="152.7" r="3.5" fill="#9ca3af"/>
+<circle cx="870.0" cy="50.9" r="3.5" fill="#9ca3af"/>
+<polyline fill="none" stroke="#0f766e" stroke-width="2.5" points="70.0,150.0 870.0,162.2"/>
+<circle cx="70.0" cy="150.0" r="3.5" fill="#0f766e"/>
+<circle cx="870.0" cy="162.2" r="3.5" fill="#0f766e"/>
+<rect x="70" y="8" width="12" height="12" rx="2" fill="#9ca3af"/>
+<text x="88" y="18" font-size="12" fill="#374151">标准模式</text>
+<rect x="220" y="8" width="12" height="12" rx="2" fill="#0f766e"/>
+<text x="238" y="18" font-size="12" fill="#374151">长程任务模式</text>
+</svg>
+    <figcaption>四轮的总 token。标准模式从 45.5 M 跳到 88.6 M，长程模式在 46.6 M 和 41.4 M 之间。</figcaption>
+  </figure>
+  <p>长程模式在第一轮把唯一没满分的子任务补到了 10 分，反馈重跑花了 3.92 M token；标准模式三轮重跑花掉 15.20 M，分数没动。</p>
+</section>
+
+<section>
+  <h2>4 统计判定</h2>
+  <p>分数差 +0.756，配对 t 检验 +1.63（df=8），
+  双尾 p = 0.142，按 α = 0.15 判为显著，85% 置信区间 +0.02 到 +1.49。
+  精确 Wilcoxon 符号秩检验给出 p = 0.250。9 个配对里有 6 个差值为 0，
+  差异集中在三个场景上。</p>
+  <p>token 比的几何平均是 0.51 倍，也就是典型场景省 49%，
+  配对 t 检验 p = 0.198，未达阈值，85% 区间 0.24 倍到 1.09 倍。
+  比值从 0.02 倍跨到 1.66 倍，方差把均值淹没了。每次调用承载的上下文从 179.8 K 降到 84.7 K，这一项由窗口的构造决定，与抽样无关。</p>
+  <h3>分数差</h3>
+  <table>
+    <tbody>
+      <tr><td>均值 ± 标准差</td><td>+0.756 ± 1.392</td></tr>
+      <tr><td>配对 t / df</td><td>+1.63 / 8</td></tr>
+      <tr><td>双尾 p</td><td>0.1421</td></tr>
+      <tr><td>Cohen's d</td><td>+0.54</td></tr>
+      <tr><td>符号检验</td><td>3 胜 / 6 平 / 0 负，p = 0.25</td></tr>
+      <tr><td>Wilcoxon 符号秩</td><td>W+ = 6.0，n = 3，p = 0.250</td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th>置信水平</th><th>均值差区间</th><th>判定</th></tr></thead>
+    <tbody>
+<tr><td>80%</td><td>+0.11 ~ +1.40</td><td class='win'>显著</td></tr>
+<tr><td>85%</td><td>+0.02 ~ +1.49</td><td class='win'>显著</td></tr>
+<tr><td>90%</td><td>-0.11 ~ +1.62</td><td class='loss'>不显著</td></tr>
+<tr><td>95%</td><td>-0.31 ~ +1.83</td><td class='loss'>不显著</td></tr>
+    </tbody>
+  </table>
+  <h3>token 比</h3>
+  <table>
+    <tbody>
+      <tr><td>几何平均比值</td><td>0.513×</td></tr>
+      <tr><td>对数均值 ± 标准差</td><td>-0.668 ± 1.426</td></tr>
+      <tr><td>配对 t / df</td><td>-1.41 / 8</td></tr>
+      <tr><td>双尾 p</td><td>0.1975</td></tr>
+      <tr><td>符号检验</td><td>6 省 / 3 贵 / 0 持平，p = 0.51</td></tr>
+      <tr><td>Wilcoxon 符号秩</td><td>W+ = 12.0，n = 9，p = 0.250</td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th>置信水平</th><th>比值区间</th><th>判定</th></tr></thead>
+    <tbody>
+<tr><td>80%</td><td>0.26× ~ 1.00×</td><td class='win'>显著</td></tr>
+<tr><td>85%</td><td>0.24× ~ 1.09×</td><td class='loss'>不显著</td></tr>
+<tr><td>90%</td><td>0.21× ~ 1.24×</td><td class='loss'>不显著</td></tr>
+<tr><td>95%</td><td>0.17× ~ 1.53×</td><td class='loss'>不显著</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>5 复现与产物</h2>
+  <p>驱动脚本、原始产物与报告本身都在这个仓库里：
+  <a href="https://github.com/jacksonwang021219-sudo/agencybench-long-horizon-eval">github.com/jacksonwang021219-sudo/agencybench-long-horizon-eval</a>。
+  报告用到的数据文件在 <code>runs/</code> 下，生成脚本在 <code>driver/</code> 下，仓库 README 里写了从零复现的步骤。
+  基准本身不入库，按 README 里的命令从 <a href="https://github.com/GAIR-NLP/AgencyBench">GAIR-NLP/AgencyBench</a> 取。</p>
+  <pre># 两个模式各跑一遍（9 个 scenario）
+python3 driver/run_optionc.py --base-url http://127.0.0.1:&lt;port&gt; --workers 4
+
+# 汇总：分数取各 scenario 的 meta_eval.json，token 取该工作区下所有会话
+python3 driver/final_table.py --base-url http://127.0.0.1:&lt;port&gt;
+
+# 单个 scenario
+python3 driver/bench_agency.py --scenario ../bench/AgencyBench/AgencyBench-v2/Backend/scenario1   --preset standard --model-name std-be1 --layout subtasks --grader eval-only --second-pass</pre>
+  <table>
+    <thead><tr><th class="l">产物</th><th class="l">内容</th></tr></thead>
+    <tbody>
+      <tr><td class="l"><code>runs/optionC/optionC-final.json</code></td><td class="l">9 × 2 的完整结果：分数、token、步数、记录与折叠、墙钟</td></tr>
+      <tr><td class="l"><code>runs/optionC/*.json</code>、<code>*.log</code></td><td class="l">每个 run 的逐轮统计和完整日志</td></tr>
+      <tr><td class="l"><code>runs/full-*.json</code></td><td class="l">Backend/scenario1 的四轮</td></tr>
+      <tr><td class="l"><code>driver/eval_only_shim.py</code></td><td class="l">用官方评分器给外来 agent 的工作区打分</td></tr>
+      <tr><td class="l"><code>driver/final_table.py</code>、<code>run_tokens.py</code></td><td class="l">汇总与多会话 token 口径</td></tr>
+      <tr><td class="l"><code>report/long-horizon-eval-report.md</code></td><td class="l">长文版本，含逐轮明细与 UltraHorizon 部分</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</main>
+<footer>由 <code>driver/make_html_report.py</code> 从 <code>runs/</code> 下的原始产物生成。页面自包含，无外部依赖。
+仓库：<a href="https://github.com/jacksonwang021219-sudo/agencybench-long-horizon-eval">agencybench-long-horizon-eval</a></footer>
+</body>
+</html>

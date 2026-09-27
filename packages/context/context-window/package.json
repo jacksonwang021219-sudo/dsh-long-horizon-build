@@ -1,0 +1,45 @@
+{
+  "name": "@deepseek-ai/dsh-context-window",
+  "description": "Sliding-window context policy: keep the newest user requests visible and replace older turn traces with the records the main agent writes",
+  "version": "0.1.0-rc.5",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json",
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    }
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-agent": "workspace:^",
+    "@deepseek-ai/dsh-compaction": "workspace:^",
+    "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/dsh-llm": "workspace:^",
+    "@deepseek-ai/dsh-session": "workspace:^",
+    "@deepseek-ai/dsh-subagent": "workspace:^",
+    "@deepseek-ai/dsh-system-prompt": "workspace:^",
+    "@deepseek-ai/dsh-token-meter": "workspace:^",
+    "@deepseek-ai/dsh-tools": "workspace:^"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "workspace:^"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts"
+  ],
+  "devDependencies": {
+    "@deepseek-ai/dsh-invariants": "workspace:^"
+  }
+}
